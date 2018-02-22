@@ -33,7 +33,7 @@ public class DefaultRowSet implements RowSet {
     private final RowSetMetaData metaData;
 
     private int currentRowIndex = -1;
-    private String[] currentRow;
+    private Object[] currentRow;
 
     DefaultRowSet(Sheet sheet, RowSetMetaData metaData) {
         this.sheet = sheet;
@@ -62,27 +62,27 @@ public class DefaultRowSet implements RowSet {
     }
 
     @Override
-    public String[] getCurrentRow() {
+    public Object[] getCurrentRow() {
         return this.currentRow;
     }
 
     @Override
-    public String getColumnValue(int idx) {
+    public Object getColumnValue(int idx) {
         return currentRow[idx];
     }
 
     @Override
     public Properties getProperties() {
-        final String[] names = metaData.getColumnNames();
+        final Object[] names = metaData.getColumnNames();
         if (names == null) {
             throw new IllegalStateException("Cannot create properties without meta data");
         }
 
         Properties props = new Properties();
         for (int i = 0; i < currentRow.length; i++) {
-            String value = currentRow[i];
+            Object value = currentRow[i];
             if (value != null) {
-                props.setProperty(names[i], value);
+                props.setProperty((String) names[i], (String) value);
             }
         }
         return props;

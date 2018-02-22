@@ -29,7 +29,7 @@ public class RowNumberColumnNameExtractor implements ColumnNameExtractor {
     private int headerRowNumber;
 
     @Override
-    public String[] getColumnNames(final Sheet sheet) {
+    public Object[] getColumnNames(final Sheet sheet) {
         return sheet.getRow(headerRowNumber);
     }
 

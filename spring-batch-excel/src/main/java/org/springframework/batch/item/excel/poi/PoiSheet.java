@@ -73,12 +73,12 @@ public class PoiSheet implements Sheet {
      * {@inheritDoc}
      */
     @Override
-    public String[] getRow(final int rowNumber) {
+    public Object[] getRow(final int rowNumber) {
         final Row row = this.delegate.getRow(rowNumber);
         if (row == null) {
             return null;
         }
-        final List<String> cells = new LinkedList<String>();
+        final List<Object> cells = new LinkedList<Object>();
 
         for (int i = 0; i < getNumberOfColumns(); i++) {
             Cell cell = row.getCell(i);
@@ -88,7 +88,7 @@ public class PoiSheet implements Sheet {
                         Date date = cell.getDateCellValue();
                         cells.add(String.valueOf(date.getTime()));
                     } else {
-                        cells.add(String.valueOf(cell.getNumericCellValue()));
+                        cells.add(new Double(cell.getNumericCellValue()));
                     }
                     break;
                 case Cell.CELL_TYPE_BOOLEAN:
@@ -97,6 +97,7 @@ public class PoiSheet implements Sheet {
                 case Cell.CELL_TYPE_STRING:
                 case Cell.CELL_TYPE_BLANK:
                     cells.add(cell.getStringCellValue());
+
                     break;
                 case Cell.CELL_TYPE_FORMULA:
                     cells.add(getFormulaEvaluator().evaluate(cell).formatAsString());
@@ -105,7 +106,7 @@ public class PoiSheet implements Sheet {
                     throw new IllegalArgumentException("Cannot handle cells of type " + cell.getCellType());
             }
         }
-        return cells.toArray(new String[cells.size()]);
+        return cells.toArray(new Object[cells.size()]);
     }
 
     private FormulaEvaluator getFormulaEvaluator() {

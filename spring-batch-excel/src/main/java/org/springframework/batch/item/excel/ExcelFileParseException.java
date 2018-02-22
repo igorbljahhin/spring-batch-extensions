@@ -29,7 +29,7 @@ public class ExcelFileParseException extends ParseException {
 
     private final String filename;
     private final String sheet;
-    private final String[] row;
+    private final Object[] row;
     private final int rowNumber;
 
     /**
@@ -43,7 +43,7 @@ public class ExcelFileParseException extends ParseException {
      * @param row       the row data as text
      */
     public ExcelFileParseException(final String message, final Throwable cause, final String filename,
-                                   final String sheet, final int rowNumber, final String[] row) {
+                                   final String sheet, final int rowNumber, final Object[] row) {
         super(message, cause);
         this.filename = filename;
         this.sheet = sheet;
@@ -63,7 +63,7 @@ public class ExcelFileParseException extends ParseException {
         return this.rowNumber;
     }
 
-    public String[] getRow() {
+    public Object[] getRow() {
         return this.row;
     }
 

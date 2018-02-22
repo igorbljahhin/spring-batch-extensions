@@ -44,7 +44,7 @@ public interface Sheet {
      * @param rowNumber the row number to read.
      * @return a String[] or null
      */
-    String[] getRow(int rowNumber);
+    Object[] getRow(int rowNumber);
 
     /**
      * The number of columns in this sheet.

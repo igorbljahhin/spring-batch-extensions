@@ -53,7 +53,7 @@ public interface RowSet {
      *
      * @return the row as a String[]
      */
-    String[] getCurrentRow();
+    Object[] getCurrentRow();
 
     /**
      * Retrieves the value of the indicated column in the current row as a String object.
@@ -61,7 +61,7 @@ public interface RowSet {
      * @param idx the column index, 0 based
      * @return a String objeect respresenting the column value.
      */
-    String getColumnValue(int idx);
+    Object getColumnValue(int idx);
 
 
     /**

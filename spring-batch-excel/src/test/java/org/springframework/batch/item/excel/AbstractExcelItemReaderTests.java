@@ -71,9 +71,9 @@ public abstract class AbstractExcelItemReaderTests  {
     @Test
     public void readExcelFile() throws Exception {
         assertEquals(3, this.itemReader.getNumberOfSheets());
-        String[] row;
+        Object[] row;
         do {
-            row = (String[]) this.itemReader.read();
+            row = (Object[]) this.itemReader.read();
             this.logger.debug("Read: " + StringUtils.arrayToCommaDelimitedString(row));
             if (row != null) {
                 assertEquals(6, row.length);

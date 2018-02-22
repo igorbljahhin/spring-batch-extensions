@@ -37,13 +37,13 @@ public class DefaultRowSetMetaData implements RowSetMetaData {
     }
 
     @Override
-    public String[] getColumnNames() {
+    public Object[] getColumnNames() {
         return columnNameExtractor.getColumnNames(sheet);
     }
 
     @Override
-    public String getColumnName(int idx) {
-        String[] names = getColumnNames();
+    public Object getColumnName(int idx) {
+        Object[] names = getColumnNames();
         return names[idx];
     }
 

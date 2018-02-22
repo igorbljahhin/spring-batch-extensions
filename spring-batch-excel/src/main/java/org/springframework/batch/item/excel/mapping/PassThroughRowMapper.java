@@ -25,10 +25,10 @@ import org.springframework.batch.item.excel.support.rowset.RowSet;
  * @author Marten Deinum
  * @since 0.5.0
  */
-public class PassThroughRowMapper implements RowMapper<String[]> {
+public class PassThroughRowMapper implements RowMapper<Object[]> {
 
     @Override
-    public String[] mapRow(final RowSet rs) throws Exception {
+    public Object[] mapRow(final RowSet rs) throws Exception {
         return rs.getCurrentRow();
     }
 
