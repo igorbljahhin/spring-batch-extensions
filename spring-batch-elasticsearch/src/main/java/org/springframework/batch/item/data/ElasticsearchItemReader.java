@@ -16,12 +16,6 @@
 
 package org.springframework.batch.item.data;
 
-import static org.slf4j.LoggerFactory.getLogger;
-import static org.springframework.util.Assert.state;
-import static org.springframework.util.ClassUtils.getShortName;
-
-import java.util.Iterator;
-
 import org.slf4j.Logger;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemReader;
@@ -29,6 +23,12 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.query.SearchQuery;
+
+import java.util.Iterator;
+
+import static org.slf4j.LoggerFactory.getLogger;
+import static org.springframework.util.Assert.state;
+import static org.springframework.util.ClassUtils.getShortName;
 
 /**
  * <p>
@@ -49,41 +49,38 @@ import org.springframework.data.elasticsearch.core.query.SearchQuery;
  * if used in a multi-threaded client (no restart available).
  * </p>
  *
- *
  * @author Hasnain Javed
- * @since  3.x.x
+ * @since 3.x.x
  */
 public class ElasticsearchItemReader<T> extends AbstractPaginatedDataItemReader<T> implements InitializingBean {
 
-	private final Logger logger;
+    private final ElasticsearchOperations elasticsearchOperations;
+    private final Logger logger;
+    private final SearchQuery query;
 
-	private final ElasticsearchOperations elasticsearchOperations;
+    private final Class<? extends T> targetType;
 
-	private final SearchQuery query;
+    public ElasticsearchItemReader(ElasticsearchOperations elasticsearchOperations, SearchQuery query, Class<? extends T> targetType) {
+        setName(getShortName(getClass()));
+        logger = getLogger(getClass());
+        this.elasticsearchOperations = elasticsearchOperations;
+        this.query = query;
+        this.targetType = targetType;
+    }
 
-	private final Class<? extends T> targetType;
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
+        state(query != null, "A query is required.");
+        state(targetType != null, "A target type to convert the input into is required.");
+    }
 
-	public ElasticsearchItemReader(ElasticsearchOperations elasticsearchOperations, SearchQuery query, Class<? extends T> targetType) {
-		setName(getShortName(getClass()));
-		logger = getLogger(getClass());
-		this.elasticsearchOperations = elasticsearchOperations;
-		this.query = query;
-		this.targetType = targetType;
-	}
+    @Override
+    @SuppressWarnings("unchecked")
+    protected Iterator<T> doPageRead() {
 
-	@Override
-	public void afterPropertiesSet() throws Exception {
-		state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
-		state(query != null, "A query is required.");
-		state(targetType != null, "A target type to convert the input into is required.");
-	}
+        logger.debug("executing query {}", query.getQuery());
 
-	@Override
-	@SuppressWarnings("unchecked")
-	protected Iterator<T> doPageRead() {
-
-		logger.debug("executing query {}", query.getQuery());
-
-		return (Iterator<T>)elasticsearchOperations.queryForList(query, targetType).iterator();
-	}
+        return (Iterator<T>) elasticsearchOperations.queryForList(query, targetType).iterator();
+    }
 }

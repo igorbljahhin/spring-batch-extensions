@@ -16,26 +16,21 @@
 
 package org.springframework.batch.item.data;
 
-import static java.lang.String.valueOf;
-import static java.util.UUID.randomUUID;
-import static org.slf4j.LoggerFactory.getLogger;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.bindResource;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.getResource;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.hasResource;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization;
-import static org.springframework.transaction.support.TransactionSynchronizationManager.unbindResource;
-import static org.springframework.util.Assert.state;
-import static org.springframework.util.CollectionUtils.isEmpty;
-
-import java.util.List;
-
 import org.slf4j.Logger;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.transaction.support.TransactionSynchronizationAdapter;
+
+import java.util.List;
+
+import static java.lang.String.valueOf;
+import static java.util.UUID.randomUUID;
+import static org.slf4j.LoggerFactory.getLogger;
+import static org.springframework.transaction.support.TransactionSynchronizationManager.*;
+import static org.springframework.util.Assert.state;
+import static org.springframework.util.CollectionUtils.isEmpty;
 
 /**
  * <p>
@@ -50,112 +45,111 @@ import org.springframework.transaction.support.TransactionSynchronizationAdapter
  * </p>
  *
  * @author Hasnain Javed
- * @since  3.x.x
- *
+ * @since 3.x.x
  */
 public class ElasticsearchItemWriter implements ItemWriter<IndexQuery>, InitializingBean {
 
-	private final String dataKey;
-	private final Logger logger;
-	private ElasticsearchOperations elasticsearchOperations;	
-	private boolean delete;
+    private final String dataKey;
+    private final Logger logger;
+    private boolean delete;
+    private ElasticsearchOperations elasticsearchOperations;
 
-	public ElasticsearchItemWriter(ElasticsearchOperations elasticsearchOperations) {
-		super();
-		dataKey = valueOf(randomUUID());
-		logger = getLogger(getClass());
-		delete = false;
-		this.elasticsearchOperations = elasticsearchOperations;
-	}
+    public ElasticsearchItemWriter(ElasticsearchOperations elasticsearchOperations) {
+        super();
+        dataKey = valueOf(randomUUID());
+        logger = getLogger(getClass());
+        delete = false;
+        this.elasticsearchOperations = elasticsearchOperations;
+    }
 
-	/**
-	 * A flag for removing items given to the writer. Default value is set to false indicating that the items will be saved.
-	 * otherwise, the items will be removed.
-	 *
-	 * @param delete flag
-	 */
-	public void setDelete(boolean delete) {
-		this.delete = delete;
-	}
+    @SuppressWarnings("unchecked")
+    private void addToBuffer(List<? extends IndexQuery> items) {
 
-	@Override
-	public void afterPropertiesSet() throws Exception {
-		state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
-	}
+        if (hasResource(dataKey)) {
+            logger.debug("appending items to buffer under key {}", dataKey);
+            List<IndexQuery> buffer = (List<IndexQuery>) getResource(dataKey);
+            buffer.addAll(items);
+        } else {
+            logger.debug("adding items to buffer under key {}", dataKey);
+            bindResource(dataKey, items);
+            registerSynchronization(new TransactionSynchronizationCallbackImpl());
+        }
+    }
 
-	@Override
-	public void write(List<? extends IndexQuery> items) throws Exception {
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
+    }
 
-		if(isActualTransactionActive()) {
-			addToBuffer(items);
-		}else {
-			writeItems(items);
-		}
-	}
+    /**
+     * A flag for removing items given to the writer. Default value is set to false indicating that the items will be saved.
+     * otherwise, the items will be removed.
+     *
+     * @param delete flag
+     */
+    public void setDelete(boolean delete) {
+        this.delete = delete;
+    }
 
-	/**
-	 * Writes to Elasticsearch via the template.
-	 * This can be overridden by a subclass if required.
-	 *
-	 * @param items the list of items to be indexed.
-	 */
-	protected void writeItems(List<? extends IndexQuery> items) {
+    @Override
+    public void write(List<? extends IndexQuery> items) throws Exception {
 
-		if(isEmpty(items)) {
-			logger.warn("no items to write to elasticsearch. list is empty or null");
-		}else {
+        if (isActualTransactionActive()) {
+            addToBuffer(items);
+        } else {
+            writeItems(items);
+        }
+    }
 
-			for(IndexQuery item : items) {
+    /**
+     * Writes to Elasticsearch via the template.
+     * This can be overridden by a subclass if required.
+     *
+     * @param items the list of items to be indexed.
+     */
+    protected void writeItems(List<? extends IndexQuery> items) {
 
-				if(delete) {
-					String id = item.getId();
-					logger.debug("deleting item with id {}", id);
-					elasticsearchOperations.delete(item.getObject().getClass(), id);
-				}else {					
-					String id = elasticsearchOperations.index(item);
-					logger.debug("added item to elasticsearch with id {}", id);
-				}
-			}
-		}
-	}
+        if (isEmpty(items)) {
+            logger.warn("no items to write to elasticsearch. list is empty or null");
+        } else {
 
-	@SuppressWarnings("unchecked")
-	private void addToBuffer(List<? extends IndexQuery> items) {
+            for (IndexQuery item : items) {
 
-		if(hasResource(dataKey)) {
-			logger.debug("appending items to buffer under key {}", dataKey);
-			List<IndexQuery> buffer = (List<IndexQuery>) getResource(dataKey);
-			buffer.addAll(items);
-		}else {
-			logger.debug("adding items to buffer under key {}", dataKey);
-			bindResource(dataKey, items);
-			registerSynchronization(new TransactionSynchronizationCallbackImpl());
-		}
-	}
+                if (delete) {
+                    String id = item.getId();
+                    logger.debug("deleting item with id {}", id);
+                    elasticsearchOperations.delete(item.getObject().getClass(), id);
+                } else {
+                    String id = elasticsearchOperations.index(item);
+                    logger.debug("added item to elasticsearch with id {}", id);
+                }
+            }
+        }
+    }
 
-	private class TransactionSynchronizationCallbackImpl extends TransactionSynchronizationAdapter {
-		@SuppressWarnings("unchecked")
-		@Override
-		public void beforeCommit(boolean readOnly) {
+    private class TransactionSynchronizationCallbackImpl extends TransactionSynchronizationAdapter {
+        @Override
+        public void afterCompletion(int status) {
+            if (hasResource(dataKey)) {
+                logger.debug("removing items from buffer under key {}", dataKey);
+                unbindResource(dataKey);
+            }
+        }
 
-			List<IndexQuery> items = (List<IndexQuery>) getResource(dataKey);
-			if(!isEmpty(items)) {
-				if(!readOnly) {
-					writeItems(items);
-				}else{
-					logger.warn("can not write items to elasticsearch as transaction is read only");
-				}
-			}else {
-				logger.warn("no items to write to elasticsearch. list is empty or null");
-			}
-		}
+        @SuppressWarnings("unchecked")
+        @Override
+        public void beforeCommit(boolean readOnly) {
 
-		@Override
-		public void afterCompletion(int status) {
-			if(hasResource(dataKey)) {
-				logger.debug("removing items from buffer under key {}", dataKey);
-				unbindResource(dataKey);
-			}
-		}
-	}
+            List<IndexQuery> items = (List<IndexQuery>) getResource(dataKey);
+            if (!isEmpty(items)) {
+                if (!readOnly) {
+                    writeItems(items);
+                } else {
+                    logger.warn("can not write items to elasticsearch as transaction is read only");
+                }
+            } else {
+                logger.warn("no items to write to elasticsearch. list is empty or null");
+            }
+        }
+    }
 }

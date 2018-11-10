@@ -16,15 +16,6 @@
 
 package org.springframework.batch.item.data;
 
-import static java.util.Arrays.asList;
-import static org.junit.Assert.fail;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
-import static org.mockito.MockitoAnnotations.initMocks;
-
-import java.util.ArrayList;
-import java.util.List;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,207 +29,213 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import static java.util.Arrays.asList;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.MockitoAnnotations.initMocks;
+
 public class ElasticsearchItemWriterTest {
 
-	@Document(indexName="test_index", type="test_type")
-	public class DummyDocument {
+    private DummyDocument dummyDocument;
+    @Mock
+    private ElasticsearchOperations elasticsearchOperations;
+    private TransactionTemplate transactionTemplate;
+    private ElasticsearchItemWriter writer;
 
-		private String id;
+    @Before
+    public void setUp() throws Exception {
+        initMocks(this);
+        transactionTemplate = new TransactionTemplate(new ResourcelessTransactionManager());
+        writer = new ElasticsearchItemWriter(elasticsearchOperations);
+        writer.afterPropertiesSet();
+        dummyDocument = new DummyDocument();
+    }
 
-		public String getId() {
-			return id;
-		}
+    @Test(expected = IllegalStateException.class)
+    public void shouldFailAssertion() throws Exception {
 
-		public void setId(String id) {
-			this.id = id;
-		}
-	}
+        new ElasticsearchItemWriter(null).afterPropertiesSet();
+        fail("Assertion shold have thrown exception on null ElasticsearchOperations");
+    }
 
-	private ElasticsearchItemWriter writer;
+    @Test
+    public void shouldNotWriteItemWhenTransactionFails() throws Exception {
 
-	@Mock
-	private ElasticsearchOperations elasticsearchOperations;
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withObject(dummyDocument);
 
-	private TransactionTemplate transactionTemplate;
+        final List<IndexQuery> items = asList(builder.build());
 
-	private DummyDocument dummyDocument;
+        try {
+            transactionTemplate.execute(new TransactionCallback<Void>() {
 
-	@Before
-	public void setUp() throws Exception {
-		initMocks(this);
-		transactionTemplate = new TransactionTemplate(new ResourcelessTransactionManager());
-		writer = new ElasticsearchItemWriter(elasticsearchOperations);
-		writer.afterPropertiesSet();
-		dummyDocument = new DummyDocument();
-	}
+                @Override
+                public Void doInTransaction(TransactionStatus status) {
+                    try {
+                        writer.write(items);
+                    } catch (Exception ignore) {
+                        fail("unexpected error occurred");
+                    }
+                    throw new RuntimeException("rollback");
+                }
+            });
+        } catch (RuntimeException re) {
+            // ignore
+        } catch (Throwable t) {
+            fail("Unexpected error occurred");
+        }
 
-	@After
-	public void tearDown() {
-		transactionTemplate = null;
-		writer = null;
-		dummyDocument = null;
-	}
+        verifyZeroInteractions(elasticsearchOperations);
+    }
 
-	@Test(expected=IllegalStateException.class)
-	public void shouldFailAssertion() throws Exception {
+    @Test
+    public void shouldNotWriteItemWhenTransactionIsReadOnly() throws Exception {
 
-		new ElasticsearchItemWriter(null).afterPropertiesSet();
-		fail("Assertion shold have thrown exception on null ElasticsearchOperations");
-	}
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withObject(dummyDocument);
 
-	@Test
-	public void shouldNotWriteWhenNoTransactionIsActiveAndNoItem() throws Exception {
+        final List<IndexQuery> items = asList(builder.build());
 
-		writer.write(null);
-		verifyZeroInteractions(elasticsearchOperations);
+        try {
 
-		writer.write(new ArrayList<IndexQuery>(0));
-		verifyZeroInteractions(elasticsearchOperations);
-	}
+            transactionTemplate.setReadOnly(true);
+            transactionTemplate.execute(new TransactionCallback<Void>() {
 
-	@Test
-	public void shouldWriteItemWhenNoTransactionIsActive() throws Exception {
+                @Override
+                public Void doInTransaction(TransactionStatus status) {
+                    try {
+                        writer.write(items);
+                    } catch (Exception ignore) {
+                        fail("unexpected error occurred");
+                    }
+                    return null;
+                }
+            });
+        } catch (Throwable t) {
+            fail("unexpected error occurred");
+        }
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withObject(dummyDocument);
+        verifyZeroInteractions(elasticsearchOperations);
+    }
 
-		List<IndexQuery> items = asList(builder.build());
+    @Test
+    public void shouldNotWriteWhenNoTransactionIsActiveAndNoItem() throws Exception {
 
-		writer.write(items);
+        writer.write(null);
+        verifyZeroInteractions(elasticsearchOperations);
 
-		verify(elasticsearchOperations).index(items.iterator().next());
-	}
+        writer.write(new ArrayList<IndexQuery>(0));
+        verifyZeroInteractions(elasticsearchOperations);
+    }
 
-	@Test
-	public void shouldWriteItemWhenInTransaction() throws Exception {
+    @Test
+    public void shouldRemoveItemWhenInTransaction() throws Exception {
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withObject(dummyDocument);
+        writer.setDelete(true);
 
-		final List<IndexQuery> items = asList(builder.build());
+        dummyDocument.setId("123456");
 
-		transactionTemplate.execute(new TransactionCallback<Void>() {
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withId(dummyDocument.getId());
+        builder.withObject(dummyDocument);
 
-			@Override
-			public Void doInTransaction(TransactionStatus status) {
-				try {
-					writer.write(items);
-				} catch (Exception e) {
-					fail("An error occurred while writing: " + e.getMessage());
-				}
+        final List<IndexQuery> items = asList(builder.build());
 
-				return null;
-			}
-		});
+        transactionTemplate.execute(new TransactionCallback<Void>() {
 
-		verify(elasticsearchOperations).index(items.iterator().next());
-	}
+            @Override
+            public Void doInTransaction(TransactionStatus status) {
+                try {
+                    writer.write(items);
+                } catch (Exception e) {
+                    fail("An error occurred while writing: " + e.getMessage());
+                }
 
-	@Test
-	public void shouldNotWriteItemWhenTransactionFails() throws Exception {
+                return null;
+            }
+        });
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withObject(dummyDocument);
+        verify(elasticsearchOperations).delete(items.iterator().next().getObject().getClass(), items.iterator().next().getId());
+    }
 
-		final List<IndexQuery> items = asList(builder.build());
+    @Test
+    public void shouldRemoveItemWhenNoTransactionIsActive() throws Exception {
 
-		try {
-			transactionTemplate.execute(new TransactionCallback<Void>() {
+        writer.setDelete(true);
 
-				@Override
-				public Void doInTransaction(TransactionStatus status) {
-					try {
-						writer.write(items);
-					} catch (Exception ignore) {
-						fail("unexpected error occurred");
-					}
-					throw new RuntimeException("rollback");
-				}
-			});
-		} catch (RuntimeException re) {
-			// ignore
-		} catch (Throwable t) {
-			fail("Unexpected error occurred");
-		}
+        dummyDocument.setId("123456");
 
-		verifyZeroInteractions(elasticsearchOperations);
-	}
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withId(dummyDocument.getId());
+        builder.withObject(dummyDocument);
 
-	@Test
-	public void shouldNotWriteItemWhenTransactionIsReadOnly() throws Exception {
+        final List<IndexQuery> items = asList(builder.build());
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withObject(dummyDocument);
+        writer.write(items);
 
-		final List<IndexQuery> items = asList(builder.build());
+        verify(elasticsearchOperations).delete(items.iterator().next().getObject().getClass(), items.iterator().next().getId());
+    }
 
-		try {
+    @Test
+    public void shouldWriteItemWhenInTransaction() throws Exception {
 
-			transactionTemplate.setReadOnly(true);
-			transactionTemplate.execute(new TransactionCallback<Void>() {
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withObject(dummyDocument);
 
-				@Override
-				public Void doInTransaction(TransactionStatus status) {
-					try {
-						writer.write(items);
-					} catch (Exception ignore) {
-						fail("unexpected error occurred");
-					}
-					return null;
-				}
-			});
-		} catch (Throwable t) {
-			fail("unexpected error occurred");
-		}
+        final List<IndexQuery> items = asList(builder.build());
 
-		verifyZeroInteractions(elasticsearchOperations);
-	}
+        transactionTemplate.execute(new TransactionCallback<Void>() {
 
-	@Test
-	public void shouldRemoveItemWhenNoTransactionIsActive() throws Exception {
+            @Override
+            public Void doInTransaction(TransactionStatus status) {
+                try {
+                    writer.write(items);
+                } catch (Exception e) {
+                    fail("An error occurred while writing: " + e.getMessage());
+                }
 
-		writer.setDelete(true);
+                return null;
+            }
+        });
 
-		dummyDocument.setId("123456");
+        verify(elasticsearchOperations).index(items.iterator().next());
+    }
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withId(dummyDocument.getId());
-		builder.withObject(dummyDocument);
+    @Test
+    public void shouldWriteItemWhenNoTransactionIsActive() throws Exception {
 
-		final List<IndexQuery> items = asList(builder.build());
+        IndexQueryBuilder builder = new IndexQueryBuilder();
+        builder.withObject(dummyDocument);
 
-		writer.write(items);
+        List<IndexQuery> items = asList(builder.build());
 
-		verify(elasticsearchOperations).delete(items.iterator().next().getObject().getClass(), items.iterator().next().getId());
-	}
+        writer.write(items);
 
-	@Test
-	public void shouldRemoveItemWhenInTransaction() throws Exception {
+        verify(elasticsearchOperations).index(items.iterator().next());
+    }
 
-		writer.setDelete(true);
+    @After
+    public void tearDown() {
+        transactionTemplate = null;
+        writer = null;
+        dummyDocument = null;
+    }
 
-		dummyDocument.setId("123456");
+    @Document(indexName = "test_index", type = "test_type")
+    public class DummyDocument {
 
-		IndexQueryBuilder builder = new IndexQueryBuilder();
-		builder.withId(dummyDocument.getId());
-		builder.withObject(dummyDocument);
+        private String id;
 
-		final List<IndexQuery> items = asList(builder.build());
+        public String getId() {
+            return id;
+        }
 
-		transactionTemplate.execute(new TransactionCallback<Void>() {
-
-			@Override
-			public Void doInTransaction(TransactionStatus status) {
-				try {
-					writer.write(items);
-				} catch (Exception e) {
-					fail("An error occurred while writing: " + e.getMessage());
-				}
-
-				return null;
-			}
-		});
-
-		verify(elasticsearchOperations).delete(items.iterator().next().getObject().getClass(), items.iterator().next().getId());
-	}
+        public void setId(String id) {
+            this.id = id;
+        }
+    }
 }
